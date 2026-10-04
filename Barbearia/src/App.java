@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class App {
 
@@ -9,9 +10,11 @@ public class App {
     private static final int INTERVALO_CHEGADA_MAX_MS = 300;
 
     public static void main(String[] args) throws InterruptedException {
-        int numClientes = NUM_CLIENTES;
+        int numClientes = args.length > 0 ? Integer.parseInt(args[0]) : NUM_CLIENTES;
+        long seed = args.length > 1 ? Long.parseLong(args[1]) : new Random().nextLong();
+        Random random = new Random(seed + 1);
 
-        Barbearia barbearia = new Barbearia();
+        Barbearia barbearia = new Barbearia(numClientes, seed);
 
         List<Barbeiro> barbeiros = new ArrayList<>();
         List<Thread> threadsBarbeiros = new ArrayList<>();
@@ -29,7 +32,7 @@ public class App {
             Thread t = new Thread(c, "Thread-Cliente-" + String.format("%02d", i));
             threadsClientes.add(t);
             t.start();
-            Thread.sleep(randomEntre(INTERVALO_CHEGADA_MIN_MS, INTERVALO_CHEGADA_MAX_MS));
+            Thread.sleep(randomEntre(random, INTERVALO_CHEGADA_MIN_MS, INTERVALO_CHEGADA_MAX_MS));
         }
 
         for (Thread t : threadsClientes) {
@@ -49,9 +52,10 @@ public class App {
         }
 
         System.out.println("Simulacao encerrada.");
+        System.out.println(barbearia.resumoMetricas());
     }
 
-    private static int randomEntre(int min, int max) {
-        return min + (int) (Math.random() * (max - min + 1));
+    private static int randomEntre(Random random, int min, int max) {
+        return min + random.nextInt(max - min + 1);
     }
 }

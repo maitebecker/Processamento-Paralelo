@@ -1,5 +1,6 @@
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -24,9 +25,16 @@ public class Barbearia {
 
     private final Queue<Cliente> filaEmPe = new LinkedList<>();
     private final Queue<Cliente> filaSofa = new LinkedList<>();
+    private final Random random;
 
     private final AtomicInteger lotacaoAtual = new AtomicInteger(0);
     LogAuditoria auditoria = new LogAuditoria();
+    private final Metricas metricas;
+
+    Barbearia(int quantidadeClientes, long seed) {
+        metricas = new Metricas(quantidadeClientes);
+        random = new Random(seed);
+    }
 
     boolean tentarEntrar(Cliente c) {
         if (!capacidadeTotal.tryAcquire()) {
@@ -35,6 +43,7 @@ public class Barbearia {
             return false;
         }
         int lotacao = lotacaoAtual.incrementAndGet();
+        metricas.chegada(c);
         auditoria.log("CHEGADA: " + c + " entrou na barbearia (Lotacao: " + lotacao + "/" + CAPACIDADE_TOTAL + ")");
         return true;
     }
@@ -46,6 +55,7 @@ public class Barbearia {
             // senta direto, sem passar pela fila em pé
             if (filaEmPe.isEmpty() && filaSofa.size() < VAGAS_SOFA) {
                 filaSofa.add(c);
+                metricas.entradaSofa(c);
                 auditoria.log("SOFA: " + c + " sentou direto no sofa (posicao " + filaSofa.size() + " do sofa)");
                 sofaTemCliente.signalAll();
                 return;
@@ -62,6 +72,7 @@ public class Barbearia {
 
             filaEmPe.poll();
             filaSofa.add(c);
+            metricas.entradaSofa(c);
             auditoria.log("PROMOCAO: " + c + " assumiu assento no sofa (posicao " + filaSofa.size() + " do sofa)");
             sofaTemCliente.signalAll();
         } finally {
@@ -78,6 +89,7 @@ public class Barbearia {
             }
             Cliente c = filaSofa.poll();
             sofaTemVaga.signalAll(); // libera vaga do sofá para o próximo em pé
+            metricas.chamada(c, b);
             auditoria.log("ATENDIMENTO: " + b + " chamou " + c + " do sofa para a Cadeira " + b.id);
             return c;
         } finally {
@@ -93,8 +105,10 @@ public class Barbearia {
 
     void pagar(Cliente c, Barbeiro b) throws InterruptedException {
         auditoria.log("FILA-POS: " + c + " aguardando a maquina POS (atendido por " + b + ")");
+        metricas.solicitacaoPos(c);
         pos.acquire();
         try {
+            metricas.entradaPos(c);
             int tempo = randomEntre(TEMPO_PAGAMENTO_MIN_MS, TEMPO_PAGAMENTO_MAX_MS);
             Thread.sleep(tempo);
             auditoria.log("PAGAMENTO: " + c + " concluiu pagamento com " + b + " (" + tempo + "ms)");
@@ -106,10 +120,19 @@ public class Barbearia {
     void sair(Cliente c) {
         int lotacao = lotacaoAtual.decrementAndGet();
         capacidadeTotal.release();
-        auditoria.log("SAiDA: " + c + " saiu da barbearia (Lotacao: " + lotacao + "/" + CAPACIDADE_TOTAL + ")");
+        metricas.saida(c);
+        auditoria.log("SAIDA: " + c + " saiu da barbearia (Lotacao: " + lotacao + "/" + CAPACIDADE_TOTAL + ")");
+    }
+
+    void finalizarAtendimento(Barbeiro b) {
+        metricas.finalizarAtendimento(b);
+    }
+
+    String resumoMetricas() {
+        return metricas.resumo();
     }
 
     private int randomEntre(int min, int max) {
-        return min + (int) (Math.random() * (max - min + 1));
+        return min + random.nextInt(max - min + 1);
     }
 }

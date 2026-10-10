@@ -20,6 +20,7 @@ public class Barbeiro implements Runnable {
                 Cliente c = barbearia.chamarProximoCliente(this); // dorme se sofá vazio
                 barbearia.cortarCabelo(c, this);
                 barbearia.pagar(c, this);
+                barbearia.finalizarAtendimento(this);
                 c.atendimentoConcluido.release();
             }
         } catch (InterruptedException e) {
